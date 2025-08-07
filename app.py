@@ -105,7 +105,7 @@ def rag_with_llm_response(user_input, use_context):
             else:
                 prompt = f"Based on the following context, \n\nContext: {context}\n\nAnswer: {user_input}"
 
-            client = Groq(api_key='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')
+            client = Groq(api_key='Your API Key Here')
             completion = client.chat.completions.create(
                 model="meta-llama/llama-4-scout-17b-16e-instruct",
                 messages=[{"role": "user", "content": prompt}],
@@ -122,7 +122,7 @@ def rag_with_llm_response(user_input, use_context):
             weaviate_client = None
     else:
         prompt = f"Answer the following query directly: {user_input}"
-        client = Groq(api_key='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')
+        client = Groq(api_key='Your API Key Here')
         completion = client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=[{"role": "user", "content": prompt}],
