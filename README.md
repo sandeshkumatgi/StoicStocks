@@ -1,0 +1,2 @@
+# StoicStocks
+LLM RAG
