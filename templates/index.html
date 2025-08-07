@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Chatbot</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            height: calc(100vh - 160px);
+            overflow-y: auto;
+        }
+        .message {
+            animation: fadeIn 0.5s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .typing-indicator::after {
+            content: '...';
+            animation: typing 1s infinite;
+        }
+        @keyframes typing {
+            0% { content: '.'; }
+            33% { content: '..'; }
+            66% { content: '...'; }
+        }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .message-container {
+            display: flex;
+            flex-direction: column;
+            max-width: 75%;
+        }
+        .input-area {
+            background-color: rgba(255, 255, 255, 0);
+            border-top: 2px solid rgba(255, 255, 255, 0);
+            padding: 1rem;
+        }
+        .glass-user {
+            background: linear-gradient(135deg, rgba(79, 39, 161, 0.5), rgba(79, 39, 161, 0.5));
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .glass-bot {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1));
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .bot-message {
+            color: white;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 20px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #4f27a1;
+        }
+        input:checked + .slider:before {
+            transform: translateX(14px);
+        }
+    </style>
+</head>
+<body>
+    <div class="flex h-screen">
+        <div class="w-64" style="background-color: #1c1c1c; color: white; padding: 1rem;">
+            <h1 class="text-2xl font-bold mb-4">StoicStocks</h1>
+            <p>Hello. This is a chatbot that uses Rule Based Generation. The NLP processes the user's prompt and understands the intent. If the prompt is something that the NLP thinks can be served using the premade responses dictionary, then it does so, otherwise, a RAG pipeline is in place to service the user.</p>
+            <br>
+            <p>LLM used: Llama3:8b, being run using Ollama. Database being used: Weaviate. The database stores the financial information and facts about a fake made-up company.</p>
+            <br>
+            <p>You may try asking the following questions:</p>
+            <li>What was the PAT for IDFC First Bank Ltd. in Q2FY24?</li>
+            <li>What was the GNPA and NNPA for IDFC First Bank Ltd. in Q2FY24?</li>
+            <li>How much did the education loan book grow sequentially in Q2FY24?</li>
+            <li>What was the net interest margin for IDFC First Bank Ltd. in Q2FY24?</li>
+            <br>
+            <p>Note: One may require some serious computational power to run the LLM on their PC.</p>
+        </div>
+
+        <div class="flex-1 flex flex-col" style="background: url('{{ url_for('static', filename='bgimage.jpg') }}') no-repeat center center fixed; background-size: cover;">
+            <div id="chat-container" class="chat-container flex-1 p-4 overflow-y-auto">
+            </div>
+
+            <div class="flex justify-end items-center p-4">
+                <label class="mr-2 text-white">Use Context</label>
+                <label class="switch">
+                    <input type="checkbox" id="context-toggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="input-area">
+                <div class="flex">
+                    <input type="text" id="user-input" class="flex-1 border rounded-l-lg p-2 focus:outline-none focus:ring-1 focus:ring-gray-400" placeholder="Type your message...">
+                    <button id="send-button" style="background-color: #4f27a1; color: white;" class="rounded-r-lg px-4 py-2 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+
+        function addMessage(message, isUser, addToggle = false) {
+            const messageElement = document.createElement('div');
+            messageElement.className = `message flex ${isUser ? 'justify-end' : 'justify-start'} items-end mb-4`;
+            messageElement.innerHTML = `
+                ${isUser ? '' : `<img src="{{ url_for('static', filename='robot.jpg') }}" alt="Bot Avatar" class="avatar mr-2">`}
+                <div class="message-container ${isUser ? 'glass-user' : 'glass-bot'} ${isUser ? 'bg-blue-500 text-white' : 'bot-message bg-white'} rounded-lg p-3">
+                    <p>${message}</p>
+                </div>
+                ${isUser ? `<img src="{{ url_for('static', filename='user.jpg') }}" alt="User Avatar" class="avatar ml-2">` : ''}
+            `;
+            chatContainer.appendChild(messageElement);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function streamResponse(response) {
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message flex justify-start items-end mb-4';
+            messageElement.innerHTML = `
+                <img src="{{ url_for('static', filename='robot.jpg') }}" alt="Bot Avatar" class="avatar mr-2">
+                <div class="message-container glass-bot bg-white rounded-lg p-3">
+                    <p class="bot-response text-white"></p>
+                </div>
+            `;
+            chatContainer.appendChild(messageElement);
+
+            const botResponse = messageElement.querySelector('.bot-response');
+            const typingIndicator = document.createElement('span');
+            typingIndicator.className = 'typing-indicator';
+            botResponse.appendChild(typingIndicator);
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            function readStream() {
+                reader.read().then(({ done, value }) => {
+                    if (done) {
+                        typingIndicator.remove();
+                        return;
+                    }
+                    const chunk = decoder.decode(value);
+                    if (botResponse.childNodes.length === 1) {
+                        botResponse.insertBefore(document.createTextNode(chunk), typingIndicator);
+                    } else {
+                        botResponse.childNodes[0].textContent += chunk;
+                    }
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                    readStream();
+                });
+            }
+
+            readStream();
+        }
+
+        function sendMessage() {
+            const message = userInput.value.trim();
+            if (message) {
+                addMessage(message, true);
+                userInput.value = '';
+
+                const contextToggle = document.getElementById('context-toggle');
+                const useContext = contextToggle ? contextToggle.checked : false;
+
+                fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message, useContext: useContext }),
+                })
+                .then(response => {
+                    if (response.headers.get('Content-Type').includes('text/event-stream')) {
+                        streamResponse(response);
+                    } else {
+                        return response.json().then(data => {
+                            addMessage(data.response, false, true);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    addMessage('Sorry, an error occurred.', false, true);
+                });
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        window.onload = function() {
+            addMessage("Hey there, what can I help you with?", false);
+        };
+    </script>
+</body>
+</html>
